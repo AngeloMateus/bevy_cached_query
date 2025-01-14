@@ -1,0 +1,3 @@
+avoid-breaking-exported-api = false
+too-many-arguments-threshold = 20
+type-complexity-threshold = 500

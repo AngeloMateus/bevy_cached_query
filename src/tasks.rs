@@ -1,7 +1,7 @@
 use crate::{debug_end, logging::PERFORMANCE_LOG_THRESHOLD_IN_MICROSECONDS, proto};
 use bevy::{
     prelude::*,
-    tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task},
+    tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task, TaskPool},
     utils::HashMap,
 };
 use derive_builder::Builder;
@@ -17,7 +17,7 @@ use ureq::Response;
 /**
 Stores all API tasks
 */
-pub struct QueryStores {
+pub struct QueryStore {
     /**
     Hashmap: (url, timestamp, task_sequence) -> response
     */
@@ -28,12 +28,12 @@ pub struct QueryStores {
 
     TODO: add stale time for to remove from completed_tasks
     */
-    pub store: HashMap<(String, String), serde_json::Value>,
+    pub cache: HashMap<(String, String), serde_json::Value>,
     pub sequences: HashMap<String, VecDeque<Query>>,
 }
 
 #[derive(Default, Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub enum TApiMethod {
+pub enum Method {
     #[default]
     Get,
     Post,
@@ -42,7 +42,7 @@ pub enum TApiMethod {
 #[derive(Event, Default, Debug, Eq, PartialEq, Hash, Clone, Builder)]
 #[builder(setter(strip_option, into), default)]
 pub struct Query {
-    pub method: TApiMethod,
+    pub method: Method,
     pub url: String,
     pub params: Option<Vec<(String, String)>>,
     pub body: serde_json::Value,
@@ -56,7 +56,7 @@ pub struct Query {
 Sequence of tasks to execute in order
 */
 #[derive(Event, Default, Debug, Eq, PartialEq, Hash, Clone)]
-pub struct TApiTaskSequence {
+pub struct QuerySequence {
     pub key: String,
     pub tasks: VecDeque<Query>,
 }
@@ -65,7 +65,7 @@ pub struct TApiTaskSequence {
 API request handler
 Spawn a new task if the url is not already in api_tasks.loading_requests
 */
-pub fn spawn_api_task(trigger: Trigger<Query>, mut api_tasks: ResMut<QueryStores>) {
+pub fn spawn_api_task(trigger: Trigger<Query>, mut query_store: ResMut<QueryStore>) {
     let url = trigger.event().url.clone();
     let method = trigger.event().method;
     let params = trigger.event().params.clone();
@@ -75,24 +75,25 @@ pub fn spawn_api_task(trigger: Trigger<Query>, mut api_tasks: ResMut<QueryStores
     let sequence = trigger.event().sequence_key.clone();
 
     //@TODO Add query_key to store and consumer
-    let thread_pool = AsyncComputeTaskPool::get();
+    let thread_pool = AsyncComputeTaskPool::get_or_init(TaskPool::new);
     let headers = trigger.event().headers.clone();
 
-    if !api_tasks
-        .loading_requests
-        .contains_key(&(url.clone(), query_key.clone(), sequence.clone()))
-    {
+    if !query_store.loading_requests.contains_key(&(
+        url.clone(),
+        query_key.clone(),
+        sequence.clone(),
+    )) {
         let new_url = url.clone();
         let task = thread_pool.spawn(async move {
             let url = new_url.clone();
             match method {
-                TApiMethod::Get => get(url.clone(), params, headers, timeout).await,
+                Method::Get => get(url.clone(), params, headers, timeout).await,
 
-                TApiMethod::Post => post(url.clone(), params, body, headers, timeout).await,
+                Method::Post => post(url.clone(), params, body, headers, timeout).await,
             }
         });
 
-        api_tasks
+        query_store
             .loading_requests
             .insert((url.clone(), query_key, sequence), task);
     }
@@ -108,14 +109,14 @@ Should remove older requests of the same type
 @TODO: add stale time for query_key to remove from store
 */
 pub fn api_task_poll(
-    mut api_tasks: ResMut<QueryStores>,
+    mut query_store: ResMut<QueryStore>,
     // mut app_res: ResMut<ApplicationResource>,
     mut commands: Commands,
 ) {
     let start = SystemTime::now();
     let mut completed_requests = vec![];
-    let current_sequence_tasks = api_tasks.sequences.clone();
-    api_tasks
+    let current_sequence_tasks = query_store.sequences.clone();
+    query_store
         .loading_requests
         .retain(|(url, query_key, sequence), task| {
             // keep the entry in our HashMap only if the task is not done yet
@@ -138,7 +139,7 @@ pub fn api_task_poll(
                                         current_sequence_tasks.clone().get_mut(sequence)
                                     {
                                         if sequence_tasks.pop_front().is_some() {
-                                            commands.trigger(TApiTaskSequence {
+                                            commands.trigger(QuerySequence {
                                                 key: sequence.to_string(),
                                                 tasks: sequence_tasks.clone(),
                                             });
@@ -186,13 +187,13 @@ pub fn api_task_poll(
             retain
         });
 
-    api_tasks.store.extend(completed_requests);
+    query_store.cache.extend(completed_requests);
     debug_end!(start, PERFORMANCE_LOG_THRESHOLD_IN_MICROSECONDS);
 }
 
 pub fn api_task_sequence(
-    trigger: Trigger<TApiTaskSequence>,
-    mut api_tasks: ResMut<QueryStores>,
+    trigger: Trigger<QuerySequence>,
+    mut api_tasks: ResMut<QueryStore>,
     mut commands: Commands,
 ) {
     api_tasks
@@ -268,10 +269,10 @@ async fn post(
     Ok(response)
 }
 
-pub fn task_store_is_empty(api_tasks: Res<QueryStores>) -> bool {
-    api_tasks.store.is_empty()
+pub fn query_store_is_empty(store: Res<QueryStore>) -> bool {
+    store.cache.is_empty()
 }
 
-pub fn loading_tasks_is_empty(api_tasks: Res<QueryStores>) -> bool {
-    api_tasks.loading_requests.is_empty()
+pub fn loading_requests_is_empty(store: Res<QueryStore>) -> bool {
+    store.loading_requests.is_empty()
 }

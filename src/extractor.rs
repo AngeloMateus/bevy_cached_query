@@ -6,14 +6,14 @@ use std::time::SystemTime;
 use crate::{debug_end, logging::PERFORMANCE_LOG_THRESHOLD_IN_MICROSECONDS};
 
 #[derive(Default, Clone, Event)]
-pub struct TConsumeApiTask {
+pub struct QueryConsumable {
     pub url: String,
     pub query_key: Option<String>,
     pub force_refetch: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TApiResponse {
+pub struct Response {
     msg: Option<String>,
     status: u16,
     body: Option<serde_json::Value>,
@@ -24,32 +24,32 @@ pub struct TMessageResponse {
     pub msg: String,
 }
 
-// /**
-// Checks if a vector of tasks has finished loading
+/**
+Checks if a vector of tasks has finished loading
 
-// Useful for sequences of tasks
-// */
-// pub fn check_api_tasks_completed(
-//     tasks: Vec<TConsumeApiTask>,
-//     store: &mut HashMap<(String, String), serde_json::Value>,
-// ) -> bool {
-//     for task in tasks.iter() {
-//         let endpoint = task.endpoint.split("?").next().unwrap_or("");
-//         let query_key = task.query_key.clone().unwrap_or_default();
-//         if !store.contains_key(&(endpoint.to_string(), query_key)) {
-//             return false;
-//         }
-//     }
-//     true
-// }
+Useful for sequences of tasks
+*/
+pub fn check_completed_queries(
+    tasks: Vec<QueryConsumable>,
+    store: &mut HashMap<(String, String), serde_json::Value>,
+) -> bool {
+    for task in tasks.iter() {
+        let endpoint = task.url.split("?").next().unwrap_or("");
+        let query_key = task.query_key.clone().unwrap_or_default();
+        if !store.contains_key(&(endpoint.to_string(), query_key)) {
+            return false;
+        }
+    }
+    true
+}
 
 /**
 Returns the latest response for given endpoint and removes it from cache
 
 @TODO if there is a more recent request in the loading_requests, return that instead and clear all older requests
 */
-pub fn api_task_extractor<T>(
-    task: TConsumeApiTask,
+pub fn query_extractor<T>(
+    task: QueryConsumable,
     store: &mut HashMap<(String, String), serde_json::Value>,
 ) -> Result<T>
 where
@@ -74,7 +74,7 @@ where
 
     match extracted_task {
         Some((_msg, value)) => {
-            let api_consumable: TApiResponse = serde_json::from_value(value.clone())?;
+            let api_consumable: Response = serde_json::from_value(value.clone())?;
 
             if api_consumable.status != 200 {
                 error!("API error {:?}", api_consumable.msg);
