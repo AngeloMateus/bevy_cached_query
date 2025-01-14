@@ -1,6 +1,13 @@
 test:
-	cargo clippy
-	cargo nextest run --lib --config-file nextest.conf
+	@pgrep testserver | xargs kill;
+	@cargo clippy
+	@./target/debug/testserver &
+	@cargo nextest run --lib --config-file nextest.conf
+	@pgrep testserver | xargs kill;
 
 test-verbose:
-	cargo nextest run --lib --config-file nextest.conf -- --show-output
+	@pgrep testserver | xargs kill;
+	@cargo clippy
+	@./target/debug/testserver &
+	@cargo nextest run --config-file nextest.conf --no-capture
+	@pgrep testserver | xargs kill;
