@@ -1,0 +1,8 @@
+max_width = 120
+empty_item_single_line = false
+imports_granularity = "Crate"
+group_imports = "One"
+blank_lines_upper_bound = 1
+allow_dead_code = false
+normalize_doc_attributes = true
+normalize_comments = true

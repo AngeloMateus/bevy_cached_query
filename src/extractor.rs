@@ -1,9 +1,8 @@
+use crate::{debug_end, logging::PERFORMANCE_LOG_THRESHOLD_IN_MICROSECONDS};
 use anyhow::{anyhow, Ok, Result};
 use bevy::{log::error, prelude::Event, utils::HashMap};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::time::SystemTime;
-
-use crate::{debug_end, logging::PERFORMANCE_LOG_THRESHOLD_IN_MICROSECONDS};
 
 #[derive(Default, Clone, Event)]
 pub struct QueryConsumable {
@@ -24,11 +23,9 @@ pub struct TMessageResponse {
     pub msg: String,
 }
 
-/**
-Checks if a vector of tasks has finished loading
-
-Useful for sequences of tasks
-*/
+/// Checks if a vector of tasks has finished loading
+///
+/// Useful for sequences of tasks
 pub fn check_completed_queries(
     tasks: Vec<QueryConsumable>,
     store: &mut HashMap<(String, String), serde_json::Value>,
@@ -43,11 +40,9 @@ pub fn check_completed_queries(
     true
 }
 
-/**
-Returns the latest response for given endpoint and removes it from cache
-
-@TODO if there is a more recent request in the loading_requests, return that instead and clear all older requests
-*/
+/// Returns the latest response for given endpoint and removes it from cache
+///
+/// @TODO if there is a more recent request in the loading_requests, return that instead and clear all older requests
 pub fn query_extractor<T>(
     task: QueryConsumable,
     store: &mut HashMap<(String, String), serde_json::Value>,
@@ -61,9 +56,7 @@ where
     let _force_refetch = task.force_refetch;
 
     let matches = store
-        .extract_if(|e, _| {
-            e.0.eq(&url) && e.1.to_string().eq(&query_key.clone().unwrap_or_default())
-        })
+        .extract_if(|e, _| e.0.eq(&url) && e.1.to_string().eq(&query_key.clone().unwrap_or_default()))
         .collect::<Vec<((String, String), serde_json::Value)>>();
 
     let mut extracted_task = None;
@@ -75,6 +68,8 @@ where
     match extracted_task {
         Some((_msg, value)) => {
             let api_consumable: Response = serde_json::from_value(value.clone())?;
+
+            println!("value {:#?}", value);
 
             if api_consumable.status != 200 {
                 error!("API error {:?}", api_consumable.msg);

@@ -1,12 +1,10 @@
-use bevy::prelude::*;
-use ntest::{assert_true, timeout};
-use serde::Deserialize;
-
 use crate::{
-    _tests_::util::init_test_app,
+    _tests_::util::{init_test_app, GetResponse},
     extractor::{query_extractor, QueryConsumable},
     tasks::{Method, QueryBuilder, QueryStore},
 };
+use bevy::prelude::*;
+use ntest::{assert_true, timeout};
 
 #[timeout(1000)]
 #[test]
@@ -20,15 +18,9 @@ fn extractor() {
         QueryBuilder::default()
             .method(Method::Get)
             .url(url.to_string())
-            .headers(vec![("Connection".to_string(), "close".to_string())])
             .build()
             .unwrap(),
     );
-
-    #[derive(Deserialize)]
-    struct GetResponse {
-        msg: String,
-    }
 
     loop {
         let mut store = app.world_mut().get_resource_mut::<QueryStore>().unwrap();
