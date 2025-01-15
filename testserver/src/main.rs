@@ -5,11 +5,8 @@ fn main() {
     let server = Server::http("127.0.0.1:8080").unwrap();
     let responses = HashMap::from([
         ("/extractor", "{\"msg\": \"hello world\"}"),
-        ("/same_url_collision_cache_fetch", "{\"msg\": \"success\"}"),
-        (
-            "/same_url_collision_cache_fetch?second_request=is_discarded",
-            "{\"msg\": \"fail\"}",
-        ),
+        ("/same_url", "{\"msg\": \"success\"}"),
+        ("/same_url?second_request=is_discarded", "{\"msg\": \"fail\"}"),
     ]);
     loop {
         let request = server.recv();

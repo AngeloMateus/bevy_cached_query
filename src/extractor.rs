@@ -44,29 +44,36 @@ pub fn check_completed_queries(
 ///
 /// @TODO if there is a more recent request in the loading_requests, return that instead and clear all older requests
 pub fn query_extractor<T>(
-    task: QueryConsumable,
+    consumable: QueryConsumable,
     store: &mut HashMap<(String, String), serde_json::Value>,
 ) -> Result<T>
 where
     T: DeserializeOwned,
 {
     let start = SystemTime::now();
-    let url = task.url;
-    let query_key = task.query_key.clone();
-    let _force_refetch = task.force_refetch;
-
-    let matches = store
-        .extract_if(|e, _| e.0.eq(&url) && e.1.to_string().eq(&query_key.clone().unwrap_or_default()))
-        .collect::<Vec<((String, String), serde_json::Value)>>();
-
+    let url = consumable.url;
+    let query_key = consumable.query_key.clone();
+    let force_refetch = consumable.force_refetch;
     let mut extracted_task = None;
+    if !force_refetch {
+        let extracted_ref = store.get(&(url.clone(), query_key.unwrap_or_default()));
+        if let Some(extr) = extracted_ref {
+            extracted_task = Some(extr.clone());
+        }
+    } else {
+        let extracted: Vec<((String, String), serde_json::Value)> = store
+            .extract_if(|e, _| {
+                e.0.eq(&url) && e.1.to_string().eq(&query_key.clone().unwrap_or_default())
+            })
+            .collect();
 
-    if !matches.is_empty() {
-        extracted_task = matches.first();
+        if !extracted.is_empty() {
+            extracted_task = Some(extracted.first().unwrap().1.clone());
+        }
     }
 
     match extracted_task {
-        Some((_msg, value)) => {
+        Some(value) => {
             let api_consumable: Response = serde_json::from_value(value.clone())?;
 
             println!("value {:#?}", value);

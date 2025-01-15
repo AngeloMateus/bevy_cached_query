@@ -6,8 +6,8 @@ use crate::{
 use ntest::assert_true;
 
 #[test]
-fn same_query_key_collision_cache_fetch() {
-    let url = "http://127.0.0.1:8080/same_query_key_collision_cache_fetch";
+fn same_query_key() {
+    let url = "http://127.0.0.1:8080/same_query_key";
     let mut app = init_test_app();
 
     app.world_mut().commands().trigger(
@@ -32,13 +32,12 @@ fn same_query_key_collision_cache_fetch() {
     app.update();
 
     let store = app.world().get_resource::<QueryStore>().unwrap();
-
     assert_true!(store.loading_requests.len() == 1);
 }
 
 #[test]
-fn same_url_collision_cache_fetch() {
-    let url = "http://127.0.0.1:8080/same_url_collision_cache_fetch";
+fn same_url() {
+    let url = "http://127.0.0.1:8080/same_url";
     let mut app = init_test_app();
 
     app.world_mut().commands().trigger(
@@ -76,4 +75,40 @@ fn same_url_collision_cache_fetch() {
 
         app.update();
     }
+    assert_true!(
+        app.world_mut()
+            .get_resource_mut::<QueryStore>()
+            .unwrap()
+            .cache
+            .len()
+            == 1
+    );
+}
+
+#[test]
+fn same_url_different_query_key() {
+    let url = "http://127.0.0.1:8080/same_url_different_query_key";
+    let mut app = init_test_app();
+
+    app.world_mut().commands().trigger(
+        QueryBuilder::default()
+            .method(Method::Get)
+            .url(url)
+            .query_key("key1")
+            .build()
+            .unwrap(),
+    );
+
+    app.world_mut().commands().trigger(
+        QueryBuilder::default()
+            .method(Method::Get)
+            .url(url)
+            .query_key("key2")
+            .build()
+            .unwrap(),
+    );
+
+    app.update();
+    let store = app.world().get_resource::<QueryStore>().unwrap();
+    assert_true!(store.loading_requests.len() == 2);
 }

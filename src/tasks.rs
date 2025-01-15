@@ -18,8 +18,7 @@ use ureq::Response;
 pub struct QueryStore {
     /// Hashmap: (url, query_key, task_sequence) -> response
     pub loading_requests: HashMap<(String, String, Option<String>), Task<Result<Response, ureq::Error>>>,
-    /// Hashmap: (url, query_key) -> json value
-    ///
+    /// Hashmap: (url, query_key) -> json value\
     /// TODO: add stale time to remove from cache
     pub cache: HashMap<(String, String), serde_json::Value>,
     pub sequences: HashMap<String, VecDeque<Query>>,
@@ -106,8 +105,9 @@ pub fn api_task_poll(
 ) {
     let start = SystemTime::now();
     let mut completed_requests = vec![];
-    let current_sequence_tasks = query_store.sequences.clone();
+    let current_sequence_tasks = query_store.bypass_change_detection().sequences.clone();
     query_store
+        .bypass_change_detection()
         .loading_requests
         .retain(|(url, query_key, sequence), task| {
             // keep the entry in our HashMap only if the task is not done yet

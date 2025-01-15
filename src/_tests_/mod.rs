@@ -1,6 +1,6 @@
 #[cfg(test)]
-mod extract_response;
+mod collision;
 #[cfg(test)]
-mod url_collision;
+mod extract;
 #[cfg(test)]
 mod util;
