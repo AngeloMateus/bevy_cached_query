@@ -14,20 +14,13 @@ use ureq::Response;
 
 #[allow(clippy::type_complexity)]
 #[derive(Resource, Default, Debug)]
-/**
-Stores all API tasks
-*/
+/// Stores all API tasks
 pub struct QueryStore {
-    /**
-    Hashmap: (url, timestamp, task_sequence) -> response
-    */
-    pub loading_requests:
-        HashMap<(String, String, Option<String>), Task<Result<Response, ureq::Error>>>,
-    /**
-    Hashmap: (url, query_key) -> json value
-
-    TODO: add stale time for to remove from completed_tasks
-    */
+    /// Hashmap: (url, query_key, task_sequence) -> response
+    pub loading_requests: HashMap<(String, String, Option<String>), Task<Result<Response, ureq::Error>>>,
+    /// Hashmap: (url, query_key) -> json value
+    ///
+    /// TODO: add stale time to remove from cache
     pub cache: HashMap<(String, String), serde_json::Value>,
     pub sequences: HashMap<String, VecDeque<Query>>,
 }
@@ -48,41 +41,41 @@ pub struct Query {
     pub body: serde_json::Value,
     pub headers: Option<Vec<(String, String)>>,
     pub timeout: Option<Duration>,
+    /// Querys with the same query_key will be cached, if no query key is provided, the url will be used as the key instead
     pub query_key: Option<String>,
     sequence_key: Option<String>,
 }
 
-/**
-Sequence of tasks to execute in order
-*/
+/// Sequence of tasks to execute in order
 #[derive(Event, Default, Debug, Eq, PartialEq, Hash, Clone)]
 pub struct QuerySequence {
     pub key: String,
     pub tasks: VecDeque<Query>,
 }
 
-/**
-API request handler
-Spawn a new task if the url is not already in api_tasks.loading_requests
-*/
+/// API request handler
+/// Spawn a new task if the url is not already in api_tasks.loading_requests
 pub fn spawn_api_task(trigger: Trigger<Query>, mut query_store: ResMut<QueryStore>) {
     let url = trigger.event().url.clone();
+    let query_key = trigger.event().query_key.clone().unwrap_or_default();
+
+    if query_store.cache.contains_key(&(url.clone(), query_key.clone())) {
+        return;
+    }
+
     let method = trigger.event().method;
     let params = trigger.event().params.clone();
     let body = trigger.event().body.clone();
     let timeout = trigger.event().timeout;
-    let query_key = trigger.event().query_key.clone().unwrap_or_default();
     let sequence = trigger.event().sequence_key.clone();
 
-    //@TODO Add query_key to store and consumer
     let thread_pool = AsyncComputeTaskPool::get_or_init(TaskPool::new);
     let headers = trigger.event().headers.clone();
 
-    if !query_store.loading_requests.contains_key(&(
-        url.clone(),
-        query_key.clone(),
-        sequence.clone(),
-    )) {
+    if !query_store
+        .loading_requests
+        .contains_key(&(url.clone(), query_key.clone(), sequence.clone()))
+    {
         let new_url = url.clone();
         let task = thread_pool.spawn(async move {
             let url = new_url.clone();
@@ -99,15 +92,13 @@ pub fn spawn_api_task(trigger: Trigger<Query>, mut query_store: ResMut<QueryStor
     }
 }
 
-/**
-Polls the status of all API tasks
-
-Appends completed requests to the store HashMap
-
-Should remove older requests of the same type
-
-@TODO: add stale time for query_key to remove from store
-*/
+/// Polls the status of all API tasks
+///
+/// Appends completed requests to the store HashMap
+///
+/// Should remove older requests of the same type
+///
+/// @TODO: add stale time for query_key to remove from store
 pub fn api_task_poll(
     mut query_store: ResMut<QueryStore>,
     // mut app_res: ResMut<ApplicationResource>,
@@ -153,10 +144,8 @@ pub fn api_task_poll(
                             }
                             Err(err) => {
                                 proto!("Failed to deserialize response {:#?}", err);
-                                completed_requests.push((
-                                    (url.to_string(), query_key.clone()),
-                                    json!({"status":500}),
-                                ));
+                                completed_requests
+                                    .push(((url.to_string(), query_key.clone()), json!({"status":500})));
                             }
                         }
                     }
@@ -175,10 +164,8 @@ pub fn api_task_poll(
                             ));
                             }
                         } else {
-                            completed_requests.push((
-                                (url.to_string(), query_key.clone()),
-                                json!({"status":500}),
-                            ));
+                            completed_requests
+                                .push(((url.to_string(), query_key.clone()), json!({"status":500})));
                         }
                     }
                 }
@@ -216,9 +203,7 @@ async fn get(
     headers: Option<Vec<(String, String)>>,
     timeout: Option<Duration>,
 ) -> Result<ureq::Response, ureq::Error> {
-    let agent = ureq::builder()
-        .timeout_connect(Duration::from_secs(5))
-        .build();
+    let agent = ureq::builder().timeout_connect(Duration::from_secs(5)).build();
 
     let mut request = agent
         .get(url.as_str())
@@ -246,9 +231,7 @@ async fn post(
     headers: Option<Vec<(String, String)>>,
     timeout: Option<Duration>,
 ) -> Result<ureq::Response, ureq::Error> {
-    let agent = ureq::builder()
-        .timeout_connect(Duration::from_secs(5))
-        .build();
+    let agent = ureq::builder().timeout_connect(Duration::from_secs(5)).build();
     let mut request = agent
         .post(url.as_str())
         .query_pairs(

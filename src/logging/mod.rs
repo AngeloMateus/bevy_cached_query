@@ -3,7 +3,8 @@ pub const PERFORMANCE_LOG_THRESHOLD_IN_MICROSECONDS: u128 = 40;
 #[macro_export]
 macro_rules! function_name {
     () => {{
-        fn f() {}
+        fn f() {
+        }
         fn type_name_of<T>(_: T) -> &'static str {
             std::any::type_name::<T>()
         }
@@ -16,7 +17,8 @@ macro_rules! function_name {
 #[macro_export]
 macro_rules! debug_end {
     ($start:expr, $t:expr) => {{
-        fn f() {}
+        fn f() {
+        }
         fn type_name_of<T>(_: T) -> &'static str {
             std::any::type_name::<T>()
         }
