@@ -1,4 +1,6 @@
-use crate::{debug_end, logging::PERFORMANCE_LOG_THRESHOLD_IN_MICROSECONDS, proto};
+use crate::{
+    debug_end, extractor::QueryConsumable, logging::PERFORMANCE_LOG_THRESHOLD_IN_MICROSECONDS, proto,
+};
 use bevy::{
     prelude::*,
     tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task, TaskPool},
@@ -31,6 +33,12 @@ pub enum Method {
     Post,
 }
 
+#[derive(Event)]
+pub struct ErrorTriggerEvent {
+    pub url: String,
+    pub error: u16,
+}
+
 #[derive(Event, Default, Debug, Eq, PartialEq, Hash, Clone, Builder)]
 #[builder(setter(strip_option, into), default)]
 pub struct Query {
@@ -46,10 +54,17 @@ pub struct Query {
 }
 
 /// Sequence of tasks to execute in order
-#[derive(Event, Default, Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Event, Default, Debug, Clone)]
 pub struct QuerySequence {
     pub key: String,
     pub tasks: VecDeque<Query>,
+}
+
+/// Tas sequence consumeable
+#[derive(Event, Default, Debug, Clone)]
+pub struct QuerySequenceConsumeable {
+    pub key: String,
+    pub tasks: VecDeque<QueryConsumable>,
 }
 
 /// API request handler
@@ -121,37 +136,38 @@ pub fn api_task_poll(
                 retain = false;
 
                 match response {
-                    Ok(res) => {
-                        proto!("res from response {:?}", res);
-                        match res.into_json::<serde_json::Value>() {
-                            Ok(json) => {
-                                if let Some(sequence) = sequence {
-                                    if let Some(sequence_tasks) =
-                                        current_sequence_tasks.clone().get_mut(sequence)
-                                    {
-                                        if sequence_tasks.pop_front().is_some() {
-                                            commands.trigger(QuerySequence {
-                                                key: sequence.to_string(),
-                                                tasks: sequence_tasks.clone(),
-                                            });
-                                        };
+                    Ok(res) => match res.into_json::<serde_json::Value>() {
+                        Ok(json) => {
+                            if let Some(sequence) = sequence {
+                                if let Some(sequence_tasks) =
+                                    current_sequence_tasks.clone().get_mut(sequence)
+                                {
+                                    if sequence_tasks.pop_front().is_some() {
+                                        commands.trigger(QuerySequence {
+                                            key: sequence.to_string(),
+                                            tasks: sequence_tasks.clone(),
+                                        });
                                     };
-                                }
-                                completed_requests.push((
-                                    (url.to_string(), query_key.clone()),
-                                    json!({"status": 200, "body": json}),
-                                ));
+                                };
                             }
-                            Err(err) => {
-                                proto!("Failed to deserialize response {:#?}", err);
-                                completed_requests
-                                    .push(((url.to_string(), query_key.clone()), json!({"status":500})));
-                            }
+                            completed_requests.push((
+                                (url.to_string(), query_key.clone()),
+                                json!({"status": 200, "body": json}),
+                            ));
                         }
-                    }
+                        Err(err) => {
+                            proto!("Failed to deserialize response {:#?}", err);
+                            completed_requests
+                                .push(((url.to_string(), query_key.clone()), json!({"status":500})));
+                        }
+                    },
                     Err(err) => {
                         proto!("{:#?}", err);
                         if let Some(err_res) = err.into_response() {
+                            commands.trigger(ErrorTriggerEvent {
+                                error: err_res.status(),
+                                url: url.to_string(),
+                            });
                             if err_res.status() == 401 {
                                 //@TODO
                                 proto!("\n\nSHOULD RE-AUTHENTICATE\nre-add reauthentication \n\n");
@@ -178,6 +194,7 @@ pub fn api_task_poll(
     debug_end!(start, PERFORMANCE_LOG_THRESHOLD_IN_MICROSECONDS);
 }
 
+//@TODO this does not wait for request to complete
 pub fn api_task_sequence(
     trigger: Trigger<QuerySequence>,
     mut api_tasks: ResMut<QueryStore>,

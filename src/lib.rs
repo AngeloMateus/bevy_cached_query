@@ -1,9 +1,7 @@
 use bevy::{prelude::*, time::common_conditions::on_timer};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tasks::{
-    api_task_poll, api_task_sequence, loading_requests_is_empty, spawn_api_task, QueryStore,
-};
+use tasks::{api_task_poll, api_task_sequence, loading_requests_is_empty, spawn_api_task, QueryStore};
 
 mod _tests_;
 pub mod extractor;

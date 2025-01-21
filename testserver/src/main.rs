@@ -5,6 +5,7 @@ fn main() {
     let server = Server::http("127.0.0.1:8080").unwrap();
     let responses = HashMap::from([
         ("/extractor", "{\"msg\": \"hello world\"}"),
+        ("/force_next_refetch", "{\"msg\": \"Should be consumed once\"}"),
         ("/same_url", "{\"msg\": \"success\"}"),
         ("/same_url?second_request=is_discarded", "{\"msg\": \"fail\"}"),
     ]);

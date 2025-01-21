@@ -1,8 +1,12 @@
 [package]
+license = "MIT"
 name = "bevy_cached_query"
 version = "0.1.0"
 edition = "2021"
-publish = false
+authors = ["Angelo <angelomateus89@gmail.com>"]
+repository = "https://github.com/AngeloMateus/bevy_query_tasks"
+publish = true
+description = "Simple high level query library for Bevy based on async tasks and Observer API very loosely inspired by TanStack Query."
 
 [dependencies]
 bevy = { version = "0.14.2", default-features = false, features = [
@@ -19,7 +23,7 @@ anyhow = "1.0.94"
 hyper = "1.5.1"
 
 [dev-dependencies]
-ntest = "*"
+ntest = "0.9.3"
 tiny_http = "0.12.0"
 
 [workspace]

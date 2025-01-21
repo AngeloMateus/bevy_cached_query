@@ -4,11 +4,11 @@ use bevy::{log::error, prelude::Event, utils::HashMap};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::time::SystemTime;
 
-#[derive(Default, Clone, Event)]
+#[derive(Default, Clone, Event, Debug)]
 pub struct QueryConsumable {
     pub url: String,
     pub query_key: Option<String>,
-    pub force_refetch: bool,
+    pub force_next_refetch: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,25 +23,24 @@ pub struct TMessageResponse {
     pub msg: String,
 }
 
-/// Checks if a vector of tasks has finished loading
-///
+/// Checks if a vector of tasks has finished loading\
 /// Useful for sequences of tasks
 pub fn check_completed_queries(
-    tasks: Vec<QueryConsumable>,
+    consumables: Vec<QueryConsumable>,
     store: &mut HashMap<(String, String), serde_json::Value>,
 ) -> bool {
-    for task in tasks.iter() {
+    consumables.iter().all(|task| {
         let endpoint = task.url.split("?").next().unwrap_or("");
         let query_key = task.query_key.clone().unwrap_or_default();
+
         if !store.contains_key(&(endpoint.to_string(), query_key)) {
             return false;
         }
-    }
-    true
+        true
+    })
 }
 
-/// Returns the latest response for given endpoint and removes it from cache
-///
+/// Returns the latest response for given endpoint and removes it from cache\
 /// @TODO if there is a more recent request in the loading_requests, return that instead and clear all older requests
 pub fn query_extractor<T>(
     consumable: QueryConsumable,
@@ -53,9 +52,9 @@ where
     let start = SystemTime::now();
     let url = consumable.url;
     let query_key = consumable.query_key.clone();
-    let force_refetch = consumable.force_refetch;
+    let force_next_refetch = consumable.force_next_refetch;
     let mut extracted_task = None;
-    if !force_refetch {
+    if !force_next_refetch {
         let extracted_ref = store.get(&(url.clone(), query_key.unwrap_or_default()));
         if let Some(extr) = extracted_ref {
             extracted_task = Some(extr.clone());
@@ -75,8 +74,6 @@ where
     match extracted_task {
         Some(value) => {
             let api_consumable: Response = serde_json::from_value(value.clone())?;
-
-            println!("value {:#?}", value);
 
             if api_consumable.status != 200 {
                 error!("API error {:?}", api_consumable.msg);
