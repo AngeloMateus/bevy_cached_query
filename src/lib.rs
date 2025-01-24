@@ -1,7 +1,9 @@
 use bevy::{prelude::*, time::common_conditions::on_timer};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tasks::{api_task_poll, api_task_sequence, loading_requests_is_empty, spawn_api_task, QueryStore};
+use tasks::{
+    api_task_poll, api_task_sequence, loading_requests_is_empty, spawn_api_task, watch_cache, QueryStore,
+};
 
 mod _tests_;
 pub mod extractor;
@@ -24,9 +26,10 @@ impl Plugin for QueryTasksPlugin {
             api_task_poll
                 .run_if(on_timer(Duration::from_millis(100)))
                 .run_if(not(loading_requests_is_empty)),
-        );
-        app.init_resource::<QueryStore>();
-        app.observe(spawn_api_task);
-        app.observe(api_task_sequence);
+        )
+        .add_systems(FixedUpdate, watch_cache)
+        .init_resource::<QueryStore>()
+        .observe(spawn_api_task)
+        .observe(api_task_sequence);
     }
 }
