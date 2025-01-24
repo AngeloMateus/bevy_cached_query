@@ -64,7 +64,7 @@ fn same_url() {
                 url: url.to_string(),
                 ..Default::default()
             },
-            &mut store.cache,
+            &mut store,
         );
 
         if let Ok(response) = result {
