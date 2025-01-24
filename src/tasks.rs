@@ -18,12 +18,13 @@ use ureq::Response;
 #[derive(Resource, Default, Debug)]
 /// Stores all API tasks
 pub struct QueryStore {
-    /// Hashmap: (url, query_key, task_sequence) -> response
-    pub loading_requests: HashMap<(String, String, Option<String>), Task<Result<Response, ureq::Error>>>,
-    /// Hashmap: (url, query_key) -> json value\
-    /// TODO: add stale time to remove from cache
-    pub cache: HashMap<(String, String), serde_json::Value>,
+    /// Hashmap: (url, query_key, task_sequence, ) -> (response, query, called at)
+    pub loading_requests:
+        HashMap<(String, String, Option<String>), Task<(Result<Response, ureq::Error>, Query, u128)>>,
+    /// Hashmap: (url, query_key) -> json (value, called at)\
+    pub cache: HashMap<(String, String), (serde_json::Value, Query, u128)>,
     pub sequences: HashMap<String, VecDeque<Query>>,
+    pub stale_queries: Vec<Query>,
 }
 
 #[derive(Default, Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -76,33 +77,44 @@ pub fn spawn_api_task(trigger: Trigger<Query>, mut query_store: ResMut<QueryStor
     if query_store.cache.contains_key(&(url.clone(), query_key.clone())) {
         return;
     }
-
     let method = trigger.event().method;
     let params = trigger.event().params.clone();
     let body = trigger.event().body.clone();
     let timeout = trigger.event().timeout;
-    let sequence = trigger.event().sequence_key.clone();
+    let sequence_key = trigger.event().sequence_key.clone();
 
     let thread_pool = AsyncComputeTaskPool::get_or_init(TaskPool::new);
     let headers = trigger.event().headers.clone();
 
-    if !query_store
-        .loading_requests
-        .contains_key(&(url.clone(), query_key.clone(), sequence.clone()))
-    {
+    if !query_store.loading_requests.contains_key(&(
+        url.clone(),
+        query_key.clone(),
+        sequence_key.clone(),
+    )) {
         let new_url = url.clone();
+        let query = trigger.event().clone();
         let task = thread_pool.spawn(async move {
             let url = new_url.clone();
-            match method {
-                Method::Get => get(url.clone(), params, headers, timeout).await,
+            let now = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis();
+            (
+                match method {
+                    Method::Get => get(url.clone(), params.clone(), headers, timeout).await,
 
-                Method::Post => post(url.clone(), params, body, headers, timeout).await,
-            }
+                    Method::Post => {
+                        post(url.clone(), params.clone(), body.clone(), headers, timeout).await
+                    }
+                },
+                query.clone(),
+                now,
+            )
         });
 
         query_store
             .loading_requests
-            .insert((url.clone(), query_key, sequence), task);
+            .insert((url.clone(), query_key, sequence_key), task);
     }
 }
 
@@ -110,14 +122,10 @@ pub fn spawn_api_task(trigger: Trigger<Query>, mut query_store: ResMut<QueryStor
 ///
 /// Appends completed requests to the store HashMap
 ///
-/// Should remove older requests of the same type
+/// Should remove matching older requests
 ///
 /// @TODO: add stale time for query_key to remove from store
-pub fn api_task_poll(
-    mut query_store: ResMut<QueryStore>,
-    // mut app_res: ResMut<ApplicationResource>,
-    mut commands: Commands,
-) {
+pub fn api_task_poll(mut query_store: ResMut<QueryStore>, mut commands: Commands) {
     let start = SystemTime::now();
     let mut completed_requests = vec![];
     let current_sequence_tasks = query_store.bypass_change_detection().sequences.clone();
@@ -128,14 +136,15 @@ pub fn api_task_poll(
             // keep the entry in our HashMap only if the task is not done yet
             let mut retain = true;
 
+
             // check task
             let poll_status = block_on(future::poll_once(task));
 
             // if this task is done, handle return data
-            if let Some(response) = poll_status {
+            if let Some(st) = poll_status {
                 retain = false;
 
-                match response {
+                match st.0 {
                     Ok(res) => match res.into_json::<serde_json::Value>() {
                         Ok(json) => {
                             if let Some(sequence) = sequence {
@@ -152,13 +161,15 @@ pub fn api_task_poll(
                             }
                             completed_requests.push((
                                 (url.to_string(), query_key.clone()),
-                                json!({"status": 200, "body": json}),
+                                (json!({"status": 200, "body": json}), st.1, st.2),
                             ));
                         }
                         Err(err) => {
                             proto!("Failed to deserialize response {:#?}", err);
-                            completed_requests
-                                .push(((url.to_string(), query_key.clone()), json!({"status":500})));
+                            completed_requests.push((
+                                (url.to_string(), query_key.clone()),
+                                (json!({"status":500}), st.1, st.2),
+                            ));
                         }
                     },
                     Err(err) => {
@@ -168,20 +179,13 @@ pub fn api_task_poll(
                                 error: err_res.status(),
                                 url: url.to_string(),
                             });
-                            if err_res.status() == 401 {
-                                //@TODO
-                                proto!("\n\nSHOULD RE-AUTHENTICATE\nre-add reauthentication \n\n");
-                                // app_res.require_authentication = true;
-                                // commands.trigger(AuthenticateUser);
-                            } else {
-                                completed_requests.push((
+                            completed_requests.push((
                                 (url.to_string(), query_key.clone()),
-                                json!({"status":err_res.status(),"msg": err_res.into_string().unwrap()}),
+                                (json!({"status":err_res.status(),"msg": err_res.into_string().unwrap()}),st.1, st.2),
                             ));
-                            }
                         } else {
                             completed_requests
-                                .push(((url.to_string(), query_key.clone()), json!({"status":500})));
+                                .push(((url.to_string(), query_key.clone()), (json!({"status":500}), st.1, st.2)));
                         }
                     }
                 }
@@ -211,6 +215,13 @@ pub fn api_task_sequence(
             ..tasks[0].clone()
         };
         commands.trigger(next_task);
+    }
+}
+
+pub fn watch_cache(mut query_store: ResMut<QueryStore>, mut commands: Commands) {
+    if !query_store.stale_queries.is_empty() {
+        let removed = query_store.stale_queries.remove(0);
+        commands.trigger(removed);
     }
 }
 
