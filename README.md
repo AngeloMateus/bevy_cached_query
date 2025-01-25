@@ -129,11 +129,11 @@ let scores = query_extractor::<Vec<TimeseriesItem>>(
 
 ## Todo
 
-- [ ] Add staletime functionality
+- [x] Add staletime functionality
 
 
 ## Bevy version support
 
 | bevy | bevy_cached_query |
 | ---- | ----------------- |
-| 0.14 | 0.1, main         |
+| 0.14 | 0.2, main         |
