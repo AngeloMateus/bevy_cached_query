@@ -130,6 +130,8 @@ let scores = query_extractor::<Vec<TimeseriesItem>>(
 ## Todo
 
 - [x] Add staletime functionality
+- [ ] Implement [and_then](https://doc.rust-lang.org/std/option/enum.Option.html#method.and_then) for sequence queries to retrieve previous value
+- [ ] Strategy to return early for systems using query_extractor that have already consumed a result until signaled otherwise
 
 
 ## Bevy version support
