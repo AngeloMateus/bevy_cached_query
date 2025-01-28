@@ -26,7 +26,6 @@ pub struct TMessageResponse {
 }
 
 /// Checks if a vector of tasks has finished loading\
-/// Useful for sequences of tasks
 pub fn check_completed_queries(
     consumables: Vec<QueryConsumable>,
     cache: &mut HashMap<(String, String), (serde_json::Value, Query, u128)>,

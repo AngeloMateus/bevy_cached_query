@@ -11,6 +11,8 @@ fn main() {
         ("/same_url?second_request=is_discarded", "{\"msg\": \"fail\"}"),
         ("/is_stale", "{\"msg\": \"Should not be consumed\"}"),
         ("/refetch", "{\"msg\": \"Should refetch\"}"),
+        ("/seq1", "{\"msg\": \"1\"}"),
+        ("/seq2", "{\"msg\": \"2\"}"),
     ]);
     loop {
         let request = server.recv();
