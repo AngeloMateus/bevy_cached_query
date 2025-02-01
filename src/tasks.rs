@@ -18,7 +18,7 @@ use ureq::Response;
 #[derive(Resource, Default, Debug)]
 /// Stores all API tasks
 pub struct QueryStore {
-    /// Hashmap: (url, query_key, task_sequence, ) -> (response, query, called at)
+    /// Hashmap: (url, query_key, task_sequence) -> (response, query, called at)
     pub loading_requests:
         HashMap<(String, String, Option<String>), Task<(Result<Response, ureq::Error>, Query, u128)>>,
     /// Hashmap: (url, query_key) -> json (value, called at)\
@@ -32,6 +32,7 @@ pub enum Method {
     #[default]
     Get,
     Post,
+    Delete,
 }
 
 #[derive(Event)]
@@ -51,6 +52,7 @@ pub struct Query {
     pub timeout: Option<Duration>,
     /// Querys with the same query_key will be cached, if no query key is provided, the url will be used as the key instead
     pub query_key: Option<String>,
+    pub skip_cache_check: Option<bool>,
     sequence_key: Option<String>,
 }
 
@@ -85,14 +87,35 @@ pub fn spawn_api_task(trigger: Trigger<Query>, mut query_store: ResMut<QueryStor
 
     let thread_pool = AsyncComputeTaskPool::get_or_init(TaskPool::new);
     let headers = trigger.event().headers.clone();
-
-    if !query_store.loading_requests.contains_key(&(
+    let key_exists = query_store.loading_requests.contains_key(&(
         url.clone(),
         query_key.clone(),
         sequence_key.clone(),
-    )) {
-        let new_url = url.clone();
-        let query = trigger.event().clone();
+    ));
+    let new_url = url.clone();
+    let query = trigger.event().clone();
+    let skip_cache_check = trigger.event().skip_cache_check.unwrap_or_default();
+    let call_get = method == Method::Get;
+
+    if call_get && !skip_cache_check && !key_exists {
+        println!("calling get");
+        let task = thread_pool.spawn(async move {
+            let url = new_url.clone();
+            let now = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis();
+            (
+                get(url.clone(), params.clone(), headers, timeout).await,
+                query.clone(),
+                now,
+            )
+        });
+
+        query_store
+            .loading_requests
+            .insert((url.clone(), query_key, sequence_key), task);
+    } else if !call_get && !skip_cache_check {
         let task = thread_pool.spawn(async move {
             let url = new_url.clone();
             let now = SystemTime::now()
@@ -101,11 +124,10 @@ pub fn spawn_api_task(trigger: Trigger<Query>, mut query_store: ResMut<QueryStor
                 .as_millis();
             (
                 match method {
-                    Method::Get => get(url.clone(), params.clone(), headers, timeout).await,
-
                     Method::Post => {
                         post(url.clone(), params.clone(), body.clone(), headers, timeout).await
                     }
+                    _ => delete(url.clone(), params.clone(), headers, timeout).await,
                 },
                 query.clone(),
                 now,
@@ -277,6 +299,33 @@ async fn post(
     }
 
     let response = request.send_json(body)?;
+    Ok(response)
+}
+
+async fn delete(
+    url: String,
+    params: Option<Vec<(String, String)>>,
+    headers: Option<Vec<(String, String)>>,
+    timeout: Option<Duration>,
+) -> Result<ureq::Response, ureq::Error> {
+    let agent = ureq::builder().timeout_connect(Duration::from_secs(5)).build();
+    let mut request = agent
+        .delete(url.as_str())
+        .query_pairs(
+            params
+                .unwrap_or_default()
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str())),
+        )
+        .timeout(timeout.unwrap_or(Duration::from_secs(5)));
+
+    if let Some(headers) = headers {
+        for (key, value) in headers {
+            request = request.set(&key, &value);
+        }
+    }
+
+    let response = request.call()?;
     Ok(response)
 }
 

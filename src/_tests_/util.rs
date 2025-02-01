@@ -7,8 +7,8 @@ pub fn init_test_app() -> App {
     app.add_systems(Update, api_task_poll);
     app.add_systems(Update, watch_cache);
     app.init_resource::<QueryStore>();
-    app.observe(spawn_api_task);
-    app.observe(api_task_sequence);
+    app.add_observer(spawn_api_task);
+    app.add_observer(api_task_sequence);
 
     app
 }

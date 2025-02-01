@@ -5,10 +5,10 @@ fn main() {
     let server = Server::http("127.0.0.1:8080").unwrap();
     let responses = HashMap::from([
         ("/", "{\"msg\": \"\"}"),
-        ("/extractor", "{\"msg\": \"hello world\"}"),
-        ("/force_next_refetch", "{\"msg\": \"Should be consumed once\"}"),
         ("/same_url", "{\"msg\": \"success\"}"),
         ("/same_url?second_request=is_discarded", "{\"msg\": \"fail\"}"),
+        ("/extractor", "{\"msg\": \"hello world\"}"),
+        ("/force_next_refetch", "{\"msg\": \"Should be consumed once\"}"),
         ("/is_stale", "{\"msg\": \"Should not be consumed\"}"),
         ("/refetch", "{\"msg\": \"Should refetch\"}"),
         ("/seq1", "{\"msg\": \"1\"}"),

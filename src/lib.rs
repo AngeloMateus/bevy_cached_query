@@ -29,7 +29,7 @@ impl Plugin for QueryTasksPlugin {
         )
         .add_systems(FixedUpdate, watch_cache)
         .init_resource::<QueryStore>()
-        .observe(spawn_api_task)
-        .observe(api_task_sequence);
+        .add_observer(spawn_api_task)
+        .add_observer(api_task_sequence);
     }
 }

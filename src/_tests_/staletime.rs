@@ -67,9 +67,6 @@ fn refetch() {
     );
     app.update();
 
-    // let store = app.world().get_resource::<QueryStore>().unwrap();
-    // assert_eq!(store.loading_requests.iter().len(), 1);
-
     let mut index = 0;
     loop {
         let mut store = app.world_mut().get_resource_mut::<QueryStore>().unwrap();

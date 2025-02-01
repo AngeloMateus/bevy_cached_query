@@ -9,7 +9,7 @@ publish = true
 description = "Simple high level query library for Bevy based on async tasks and Observer API very loosely inspired by TanStack Query."
 
 [dependencies]
-bevy = { version = "0.14.2", default-features = false, features = [
+bevy = { version = "0.15.1", default-features = false, features = [
     "bevy_core_pipeline",
     "serialize",
     "multi_threaded",
