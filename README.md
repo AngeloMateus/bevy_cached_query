@@ -138,4 +138,5 @@ let scores = query_extractor::<Vec<TimeseriesItem>>(
 
 | bevy | bevy_cached_query |
 | ---- | ----------------- |
-| 0.14 | 0.2, main         |
+| 0.15 | 0.2.1, main       |
+| 0.14 | 0.2 |
