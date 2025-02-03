@@ -115,7 +115,7 @@ pub fn spawn_api_task(trigger: Trigger<Query>, mut query_store: ResMut<QueryStor
         query_store
             .loading_requests
             .insert((url.clone(), query_key, sequence_key), task);
-    } else if !call_get && !skip_cache_check {
+    } else if !call_get {
         let task = thread_pool.spawn(async move {
             let url = new_url.clone();
             let now = SystemTime::now()
